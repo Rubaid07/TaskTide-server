@@ -14,7 +14,7 @@ const client = new MongoClient(uri, {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  } 
+  }
 });
 
 async function run() {
@@ -22,16 +22,21 @@ async function run() {
 
     // await client.connect();
     const tasksCollection = client.db('TaskTideDB').collection('tasks')
-    app.post('/tasks', async(req, res)=>{
+    app.post('/tasks', async (req, res) => {
       const newTask = req.body
       console.log(newTask);
       const result = await tasksCollection.insertOne(newTask)
       res.send(result)
     })
-    app.get('/tasks', async(req, res)=> {
+    app.get('/tasks/featured', async (req, res) => {
       const result = await tasksCollection.find().sort({ deadline: 1 }).limit(6).toArray()
       res.send(result)
     })
+
+    app.get('/tasks', async (req, res) => {
+      const result = await tasksCollection.find().toArray();
+      res.send(result);
+    });
 
     // await client.db("admin").command({ ping: 1 });
     // console.log("Pinged your deployment. You successfully connected to MongoDB!");

@@ -21,7 +21,7 @@ async function run() {
   try {
 
     const tasksCollection = client.db('TaskTideDB').collection('tasks')
-    
+
     app.post('/tasks', async (req, res) => {
       const newTask = req.body
       newTask.bidsCount = 0;
@@ -64,6 +64,18 @@ async function run() {
       await tasksCollection.updateOne(filter, updateDoc);
       const updatedTask = await tasksCollection.findOne(filter);
       res.send({ success: true, task: updatedTask });
+    });
+
+    app.post('/my-tasks', async (req, res) => {
+      const { email } = req.body;
+      const tasks = await tasksCollection.find({ email }).toArray();
+      res.send(tasks);
+    });
+
+    app.delete('/tasks/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await tasksCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
     });
 
   } finally {

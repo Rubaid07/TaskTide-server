@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const app = express()
 const port = process.env.PORT || 3000;
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 app.use(cors())
 app.use(express.json())
@@ -20,14 +20,15 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
 
-    // await client.connect();
     const tasksCollection = client.db('TaskTideDB').collection('tasks')
+    
     app.post('/tasks', async (req, res) => {
       const newTask = req.body
-      console.log(newTask);
+      newTask.bidsCount = 0;
       const result = await tasksCollection.insertOne(newTask)
       res.send(result)
     })
+
     app.get('/tasks/featured', async (req, res) => {
       const result = await tasksCollection.find().sort({ deadline: 1 }).limit(6).toArray()
       res.send(result)
@@ -38,8 +39,33 @@ async function run() {
       res.send(result);
     });
 
-    // await client.db("admin").command({ ping: 1 });
-    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    app.get('/tasks/:id', async (req, res) => {
+      const id = req.params.id
+      const quary = { _id: new ObjectId(id) }
+      const result = await tasksCollection.findOne(quary)
+      res.send(result)
+    })
+
+    app.patch('/tasks/:id/bid', async (req, res) => {
+      const id = req.params.id
+      const { userEmail } = req.body
+      const filter = { _id: new ObjectId(id) }
+
+      const task = await tasksCollection.findOne(filter);
+      if (task?.bidders?.includes(userEmail)) {
+        return res.send({ success: true, alreadyBid: true });
+      }
+
+      const updateDoc = {
+        $push: { bidders: userEmail },
+        $inc: { bidsCount: 1 }
+      };
+
+      await tasksCollection.updateOne(filter, updateDoc);
+      const updatedTask = await tasksCollection.findOne(filter);
+      res.send({ success: true, task: updatedTask });
+    });
+
   } finally {
 
   }

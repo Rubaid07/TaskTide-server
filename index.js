@@ -1,5 +1,5 @@
-const express = require('express');
 const cors = require('cors');
+const express = require('express');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
@@ -7,11 +7,12 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware
+// In your server file
 app.use(cors({
   origin: ['http://localhost:5173', 'https://tasktide07.web.app'],
-  credentials: true,
-})
-)
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // MongoDB URI

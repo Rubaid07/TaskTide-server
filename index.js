@@ -4,11 +4,17 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://tasktide07.web.app'],
+  credentials: true,
+})
+)
 app.use(express.json());
 
+// MongoDB URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ynxyt70.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -19,16 +25,17 @@ const client = new MongoClient(uri, {
   }
 });
 
+// Main server function
 async function run() {
   try {
     await client.connect();
-    console.log("✅ Connected to MongoDB!");
+    console.log('✅ MongoDB Connected');
 
     const db = client.db('TaskTideDB');
     const tasksCollection = db.collection('tasks');
     const bidsCollection = db.collection('bids');
 
-    // 🟢 Create a task
+    // POST - Create Task
     app.post('/tasks', async (req, res) => {
       try {
         const newTask = {
@@ -41,12 +48,12 @@ async function run() {
         };
         const result = await tasksCollection.insertOne(newTask);
         res.status(201).send(result);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to create task', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to create task', error: err });
       }
     });
 
-    // 🟢 Get all tasks (with optional query filters)
+    // GET - All Tasks
     app.get('/tasks', async (req, res) => {
       try {
         const { status, category, search } = req.query;
@@ -59,65 +66,69 @@ async function run() {
             { description: { $regex: search, $options: 'i' } }
           ];
         }
-        const tasks = await tasksCollection.find(query).toArray();
-        res.send(tasks);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch tasks', error });
+        const result = await tasksCollection.find(query).toArray();
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch tasks', error: err });
       }
     });
 
+    // GET - Featured Tasks
     app.get('/tasks/featured', async (req, res) => {
-      const result = await tasksCollection.find().sort({ deadline: 1 }).limit(6).toArray()
-      res.send(result)
-    })
+      try {
+        const result = await tasksCollection.find().sort({ deadline: 1 }).limit(6).toArray();
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch featured tasks', error: err });
+      }
+    });
 
-    // 🟢 Get a single task by ID
+    // GET - Single Task by ID
     app.get('/tasks/:id', async (req, res) => {
       try {
-        const task = await tasksCollection.findOne({ _id: new ObjectId(req.params.id) });
-        if (!task) return res.status(404).send({ message: 'Task not found' });
-        res.send(task);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch task', error });
+        const id = req.params.id;
+        const result = await tasksCollection.findOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch task', error: err });
       }
     });
 
-    // 🟢 Update a task
+    // PUT - Update Task
     app.put('/tasks/:id', async (req, res) => {
       try {
-        const updatedTask = req.body;
+        const id = req.params.id;
+        const updated = {
+          ...req.body,
+          updatedAt: new Date()
+        };
         const result = await tasksCollection.updateOne(
-          { _id: new ObjectId(req.params.id) },
-          {
-            $set: {
-              ...updatedTask,
-              updatedAt: new Date()
-            }
-          }
+          { _id: new ObjectId(id) },
+          { $set: updated }
         );
         res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to update task', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to update task', error: err });
       }
     });
 
-    // 🟢 Delete a task
+    // DELETE - Task
     app.delete('/tasks/:id', async (req, res) => {
       try {
         const result = await tasksCollection.deleteOne({ _id: new ObjectId(req.params.id) });
         res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to delete task', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to delete task', error: err });
       }
     });
 
-    // 🟢 Simple PATCH bid (used for "love" button)
+    // PATCH - Quick Bid (update bidsCount + bidders list)
     app.patch('/tasks/:id/bid', async (req, res) => {
       try {
         const { userEmail } = req.body;
-        const taskId = req.params.id;
+        const id = req.params.id;
 
-        const task = await tasksCollection.findOne({ _id: new ObjectId(taskId) });
+        const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
         if (!task) return res.status(404).send({ message: 'Task not found' });
 
         if (task.bidders.includes(userEmail)) {
@@ -125,37 +136,36 @@ async function run() {
         }
 
         await tasksCollection.updateOne(
-          { _id: new ObjectId(taskId) },
+          { _id: new ObjectId(id) },
           {
             $push: { bidders: userEmail },
             $inc: { bidsCount: 1 }
           }
         );
-
-        const updated = await tasksCollection.findOne({ _id: new ObjectId(taskId) });
+        const updated = await tasksCollection.findOne({ _id: new ObjectId(id) });
         res.send({ success: true, task: updated });
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to update bid count', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Bid update failed', error: err });
       }
     });
 
-    // 🟢 Full bid submission (stores in bid collection)
+    // POST - Full Bid Submission
     app.post('/tasks/:id/bid', async (req, res) => {
       try {
         const { userEmail, bidAmount, message } = req.body;
-        const taskId = req.params.id;
+        const id = req.params.id;
 
-        const task = await tasksCollection.findOne({ _id: new ObjectId(taskId) });
+        const task = await tasksCollection.findOne({ _id: new ObjectId(id) });
         if (!task) return res.status(404).send({ message: 'Task not found' });
 
         const exists = await bidsCollection.findOne({
-          taskId: new ObjectId(taskId),
+          taskId: new ObjectId(id),
           bidderEmail: userEmail
         });
         if (exists) return res.status(400).send({ message: 'Already bid on this task' });
 
         const bid = {
-          taskId: new ObjectId(taskId),
+          taskId: new ObjectId(id),
           taskTitle: task.title,
           bidderEmail: userEmail,
           bidAmount,
@@ -166,7 +176,7 @@ async function run() {
 
         await bidsCollection.insertOne(bid);
         await tasksCollection.updateOne(
-          { _id: new ObjectId(taskId) },
+          { _id: new ObjectId(id) },
           {
             $push: { bidders: userEmail },
             $inc: { bidsCount: 1 }
@@ -174,42 +184,40 @@ async function run() {
         );
 
         res.send({ success: true, bid });
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to place bid', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Bid placement failed', error: err });
       }
     });
 
-    // 🟢 Get user's tasks
+    // GET - My Tasks by Email
     app.get('/my-tasks', async (req, res) => {
       try {
         const { email } = req.query;
-        const tasks = await tasksCollection.find({ email }).toArray();
-        res.send(tasks);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch user tasks', error });
+        const result = await tasksCollection.find({ email }).toArray();
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch user tasks', error: err });
       }
     });
 
-    // 🟢 Get user's bids
+    // GET - My Bids by Email
     app.get('/my-bids', async (req, res) => {
       try {
         const { email } = req.query;
         const bids = await bidsCollection.find({ bidderEmail: email }).sort({ createdAt: -1 }).toArray();
 
-        const enriched = await Promise.all(
-          bids.map(async (bid) => {
-            const task = await tasksCollection.findOne({ _id: new ObjectId(bid.taskId) });
-            return { ...bid, task };
-          })
-        );
+        const enriched = await Promise.all(bids.map(async (bid) => {
+          const task = await tasksCollection.findOne({ _id: new ObjectId(bid.taskId) });
+          return { ...bid, task };
+        }));
 
         res.send(enriched);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch user bids', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch bids', error: err });
       }
     });
 
-    // 🟢 Dashboard stats
+    // GET - Dashboard Stats
     app.get('/dashboard/stats', async (req, res) => {
       try {
         const { email } = req.query;
@@ -220,11 +228,7 @@ async function run() {
 
         const activeBids = await bidsCollection.countDocuments({ bidderEmail: email });
 
-        const completedBids = await bidsCollection.find({
-          bidderEmail: email,
-          status: 'completed'
-        }).toArray();
-
+        const completedBids = await bidsCollection.find({ bidderEmail: email, status: 'completed' }).toArray();
         const earnings = completedBids.reduce((acc, bid) => acc + (bid.bidAmount || 0), 0);
 
         res.send({
@@ -232,20 +236,17 @@ async function run() {
           activeTasks,
           completedTasks,
           activeBids,
-          earnings,
-          tasksThisWeek: 3,
-          bidsThisWeek: 2
+          earnings
         });
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch stats', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch dashboard stats', error: err });
       }
     });
 
-    // 🟢 Dashboard category breakdown
+    // GET - Dashboard Category Breakdown
     app.get('/dashboard/categories', async (req, res) => {
       try {
         const { email } = req.query;
-
         const result = await tasksCollection.aggregate([
           { $match: { email } },
           {
@@ -262,24 +263,24 @@ async function run() {
             }
           }
         ]).toArray();
-
         res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch category data', error });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch categories', error: err });
       }
     });
 
   } finally {
-    // Optional: keep MongoDB connection open
+    // Leave connection open (for serverless use .close())
   }
 }
 
 run().catch(console.dir);
 
+// Root route
 app.get('/', (req, res) => {
-  res.send("🚀 TaskTide Server is running!");
+  res.send('✅ Task Marketplace Server is running!');
 });
 
 app.listen(port, () => {
-  console.log(`🌐 Server is running on port ${port}`);
+  console.log(`🚀 Server listening on port ${port}`);
 });

@@ -7,9 +7,8 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware
-// In your server file
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://tasktide07.web.app'],
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -271,7 +270,7 @@ async function run() {
     });
 
   } finally {
-    // Leave connection open (for serverless use .close())
+    
   }
 }
 

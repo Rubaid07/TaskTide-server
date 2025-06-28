@@ -274,9 +274,13 @@ async function run() {
   }
 }
 
+run().catch(console.dir);
+
 // Root route
 app.get('/', (req, res) => {
   res.send('✅ Task Marketplace Server is running!');
 });
 
-run();
+app.listen(port, () => {
+  console.log(`🚀 Server listening on port ${port}`);
+});
